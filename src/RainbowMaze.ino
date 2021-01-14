@@ -6,35 +6,51 @@
  * Date:
  */
 
-#include "hsv.h"
 #include <vector>
 #include <array>
 #include <algorithm>
+#include "RGBmatrixPanel.h"
 
-const int16_t SIZE = 16;
-const uint16_t DOT_DELAY = 100;
+SYSTEM_MODE(MANUAL);
+SYSTEM_THREAD(ENABLED);
+
+const int16_t SIZE = 32;
+const uint16_t DOT_DELAY = 50;
 const uint16_t DONE_DELAY = 10*1000;
+const uint16_t HUE_CHANGE = 7;
+const uint16_t MAX_HUE = 1536;
+const uint8_t SATURATION = 223;
+const uint8_t VALUE = 255;
+
 
 struct CellInfo {
-  uint8_t hue;
+  uint16_t hue;
   int8_t x;
   int8_t y;
 };
 
 std::vector<CellInfo> path;
 
-CellInfo currentCell = {
-  hue: 0,
-  x: 0,
-  y: 0
-};
+CellInfo currentCell = { 0 };
 
 bool grid[SIZE][SIZE] = { false };
+
+// RGB shield
+	#define CLK	D6
+	#define OE	D7
+	#define LAT	TX
+	#define A  	A0
+	#define B  	A1
+	#define C  	A2
+	#define D	RX
+RGBmatrixPanel matrix(A, B, C, D, CLK, LAT, OE, false);
 
 void colorCell(CellInfo cell);
 
 void setup() {
   setupRandom();
+  setupHardware();
+  clearPanel();
   emptyGrid();
 }
 
@@ -48,9 +64,9 @@ void setupRandom() {
 
 void emptyGrid() {
   currentCell = {
-    hue: 0,
-    x: 0,
-    y: 0
+    hue: (uint16_t) (random() % MAX_HUE),
+    x: (int8_t) (random() % SIZE),
+    y: (int8_t) (random() % SIZE)
   };
 
   for (auto i = 0; i < SIZE; i++) {
@@ -58,8 +74,6 @@ void emptyGrid() {
       grid[i][j] = false;
     }
   }
-
-  // TODO: clear grid
 }
 
 void loop() {
@@ -89,18 +103,20 @@ void step() {
       case DOWN: y++; break;
     }
 
-    if (x < 0 && x > SIZE - 1 && y < 0 && y > SIZE - 1) {
+    if (x < 0 || x > SIZE - 1 || y < 0 || y > SIZE - 1) {
       continue;
     }
 
-    if (grid[x][y] < 0) {
+    if (!grid[x][y]) {
       foundEmpty = true;
+      break;
     }
   }
 
   // if we found a cell, move forth, otherwise move back
   if (foundEmpty) {
-    currentCell.hue++;
+    currentCell.hue += HUE_CHANGE;
+    currentCell.hue %= MAX_HUE;
     currentCell.x = x;
     currentCell.y = y;
 
@@ -116,12 +132,25 @@ void step() {
       // done!
       emptyGrid();
       delay(DONE_DELAY);
+      clearPanel();
     } else {
+      currentCell = path.back();
       path.pop_back();
     }
   }
 }
 
-void colorCell(CellInfo cell) {
+void setupHardware() {
+  matrix.begin();
+}
 
+void clearPanel() {
+  matrix.fillScreen(0);
+  matrix.updateDisplay();
+}
+
+void colorCell(CellInfo cell) {
+  auto color = matrix.ColorHSV(cell.hue, SATURATION, VALUE, true);
+  matrix.drawPixel(cell.x, cell.y, color);
+  matrix.updateDisplay();
 }
